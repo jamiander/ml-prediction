@@ -189,114 +189,6 @@ class GraduationPredictor {
         return { accuracy, precision, recall, f1, errorAnalysis, predictions };
     }
 
-    // findOptimalThreshold(features, targets, folds = 5) {
-    //     const thresholds = [0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7];
-    //     let bestThreshold = 0.5;
-    //     let bestF1 = 0;
-    //     let bestAnalysis = null;
-
-    //     // Calculate positive and negative indices first
-    //     const positiveIndices = targets.map((t, i) => t === 1 ? i : -1).filter(i => i !== -1);
-    //     const negativeIndices = targets.map((t, i) => t === 0 ? i : -1).filter(i => i !== -1);
-        
-    //     const positiveFoldSize = Math.floor(positiveIndices.length / folds);
-    //     const negativeFoldSize = Math.floor(negativeIndices.length / folds);
-
-    //     console.log('\nStarting cross-validation with', folds, 'folds');
-    //     console.log('Class distribution:', {
-    //         totalSamples: targets.length,
-    //         positives: positiveIndices.length,
-    //         negatives: negativeIndices.length,
-    //         positiveFoldSize,
-    //         negativeFoldSize
-    //     });
-
-    //     const thresholdResults = [];
-
-    //     for (const threshold of thresholds) {
-    //         let thresholdF1 = 0;
-    //         const foldAnalyses = [];
-            
-    //         for (let i = 0; i < folds; i++) {
-    //             const testIndices = [
-    //                 ...positiveIndices.slice(i * positiveFoldSize, (i + 1) * positiveFoldSize),
-    //                 ...negativeIndices.slice(i * negativeFoldSize, (i + 1) * negativeFoldSize)
-    //             ];
-                
-    //             const trainIndices = Array.from(Array(features.length).keys())
-    //                 .filter(idx => !testIndices.includes(idx));
-                
-    //             const trainFeatures = trainIndices.map(idx => features[idx]);
-    //             const trainTargets = trainIndices.map(idx => targets[idx]);
-    //             const testFeatures = testIndices.map(idx => features[idx]);
-    //             const testTargets = testIndices.map(idx => targets[idx]);
-                
-    //             const foldModel = new PolynomialRegression(trainFeatures, trainTargets, 1);
-    //             const { f1, errorAnalysis } = this.evaluateFold(foldModel, testFeatures, testTargets, threshold);
-                
-    //             thresholdF1 += f1;
-    //             foldAnalyses.push(errorAnalysis);
-    //         }
-            
-    //         const avgF1 = thresholdF1 / folds;
-            
-    //         // Aggregate analyses across folds
-    //         const aggregateAnalysis = foldAnalyses.reduce((agg, curr) => ({
-    //             totalSamples: agg.totalSamples + curr.totalSamples,
-    //             correctPredictions: agg.correctPredictions + curr.correctPredictions,
-    //             incorrectPredictions: agg.incorrectPredictions + curr.incorrectPredictions,
-    //             confusionMatrix: {
-    //                 truePositives: agg.confusionMatrix.truePositives + curr.confusionMatrix.truePositives,
-    //                 trueNegatives: agg.confusionMatrix.trueNegatives + curr.confusionMatrix.trueNegatives,
-    //                 falsePositives: agg.confusionMatrix.falsePositives + curr.confusionMatrix.falsePositives,
-    //                 falseNegatives: agg.confusionMatrix.falseNegatives + curr.confusionMatrix.falseNegatives
-    //             }
-    //         }), {
-    //             totalSamples: 0,
-    //             correctPredictions: 0,
-    //             incorrectPredictions: 0,
-    //             confusionMatrix: { truePositives: 0, trueNegatives: 0, falsePositives: 0, falseNegatives: 0 }
-    //         });
-
-    //         thresholdResults.push({
-    //             threshold,
-    //             f1Score: avgF1,
-    //             analysis: aggregateAnalysis
-    //         });
-            
-    //         if (avgF1 > bestF1) {
-    //             bestF1 = avgF1;
-    //             bestThreshold = threshold;
-    //             bestAnalysis = aggregateAnalysis;
-    //         }
-    //     }
-
-    //     // Log detailed performance analysis
-    //     console.log('\nPerformance analysis across thresholds:');
-    //     thresholdResults.forEach(result => {
-    //         console.log(`\nThreshold ${result.threshold}:`);
-    //         console.log('F1 Score:', (result.f1Score * 100).toFixed(1) + '%');
-    //         console.log('Confusion Matrix:', {
-    //             truePositives: result.analysis.confusionMatrix.truePositives,
-    //             trueNegatives: result.analysis.confusionMatrix.trueNegatives,
-    //             falsePositives: result.analysis.confusionMatrix.falsePositives,
-    //             falseNegatives: result.analysis.confusionMatrix.falseNegatives
-    //         });
-    //         console.log('Accuracy:', (result.analysis.correctPredictions / result.analysis.totalSamples * 100).toFixed(1) + '%');
-    //     });
-
-    //     console.log('\nBest threshold found:', bestThreshold);
-    //     console.log('Best F1 Score:', (bestF1 * 100).toFixed(1) + '%');
-    //     console.log('Final Confusion Matrix:', bestAnalysis.confusionMatrix);
-    //     console.log('Overall Accuracy:', (bestAnalysis.correctPredictions / bestAnalysis.totalSamples * 100).toFixed(1) + '%');
-
-    //     return { 
-    //         threshold: bestThreshold, 
-    //         f1Score: bestF1,
-    //         analysis: bestAnalysis
-    //     };
-    // }
-
     train(data) {
         if (!Array.isArray(data) || data.length < 2) {
             console.log('Not enough data points to train model');
@@ -415,6 +307,26 @@ class GraduationPredictor {
             return null;
         }
     }
+
+    interpolateFeatures(grade, employed, age, married) {
+        if (!this.model || !this.stats) {
+            console.log('Model not trained');
+            return null;
+        }
+
+        const prediction = this.predict(grade, employed, age, married);
+        if (prediction) {
+            return {
+                grade,
+                age,
+                employed: employed === 1,
+                married: married === 1,
+                graduationProbability: prediction.probability,
+                willGraduate: prediction.willGraduate,
+                features: prediction.featuresUsed
+            }; 
+        }
+    };
 }
 
 export default GraduationPredictor; 

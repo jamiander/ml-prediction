@@ -122,6 +122,46 @@ app.get('/predict', (req, res) => {
     });
 });
 
+app.get('/interpolate', (req, res) => {
+    if (!predictor.model) {
+        return res.json({
+            status: 'error',
+            message: 'Model not trained',
+            dataPoints: studentData.length
+        });
+    }
+
+    const grade = req.query.grade;
+    const employed = req.query.employed === '1' || req.query.employed === 'true' ? 1 : 0;
+    const age = req.query.age || 25;
+    const married = req.query.married === '1' || req.query.married === 'true' ? 1 : 0;
+
+    try {
+        const results = predictor.interpolateFeatures(grade, employed, age, married);
+        if (!results) {
+            return res.json({
+                status: 'error',
+                message: 'Failed to generate interpolations',
+                modelType: 'not-trained',
+                dataPoints: studentData.length
+            });
+        }
+
+        res.json({
+            status: 'success',
+            modelType: 'polynomial-regression',
+            dataPoints: studentData.length,
+            graduationProbabilities: results.map(r => r.graduationProbability)
+        });
+    } catch (error) {
+        res.json({
+            status: 'error',
+            message: 'Error generating interpolations',
+            error: error.message
+        });
+    }
+});
+
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });
