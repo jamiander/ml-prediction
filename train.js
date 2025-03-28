@@ -4,23 +4,29 @@ class CustomPolynomialRegression {
         this.coefficients = null;
     }
 
-    // Solve normal equations with regularization
-    fit(X, y, lambda = 0.01) {
+    // Solve normal equations with regularization and feature weights
+    fit(X, y, lambda = 0.1) {
         const m = X.length;
         const n = X[0].length;
         
         // Add regularization term to prevent singular matrices
+        // Scale regularization by feature weights
         const XtX = new Array(n).fill(0).map(() => new Array(n).fill(0));
         const Xty = new Array(n).fill(0);
         
-        // Calculate X^T * X and X^T * y
+        // Calculate X^T * X and X^T * y with weighted regularization
         for (let i = 0; i < n; i++) {
             for (let j = 0; j < n; j++) {
                 let sum = 0;
                 for (let k = 0; k < m; k++) {
                     sum += X[k][i] * X[k][j];
                 }
-                XtX[i][j] = sum + (i === j ? lambda : 0); // Add regularization on diagonal
+                // Stronger regularization overall and for higher-order terms
+                const regWeight = i === 0 ? lambda : // constant term
+                                 i <= 3 ? lambda * 0.8 : // linear terms (less regularization)
+                                 i <= 5 ? lambda * 2.0 : // quadratic terms
+                                 lambda * 3.0; // interaction terms and age group indicators
+                XtX[i][j] = sum + (i === j ? regWeight : 0);
             }
             
             let sum = 0;
@@ -92,18 +98,31 @@ class CustomPolynomialRegression {
 }
 
 const createScaleFeatures = (minGrade, maxGrade, minAge, maxAge) => {
-    return (grade, age) => {
+    return (grade, age, married) => {
+        // Scale features to [0,1] range
         const scaledGrade = (grade - minGrade) / (maxGrade - minGrade);
         const scaledAge = (age - minAge) / (maxAge - minAge);
         
-        // Generate polynomial features up to degree 2
+        // Feature importance weights - reduced overall to prevent overfitting
+        const w = {
+            grade: 1.5,    // Still highest importance but reduced
+            age: 1.2,      // Medium importance but reduced
+            status: 0.8    // Base importance reduced
+        };
+        
+        // Generate polynomial features with importance weights and reduced interaction terms
         return [
             1, // constant term
-            scaledGrade, // linear terms
-            scaledAge,
-            scaledGrade * scaledGrade, // quadratic terms
-            scaledAge * scaledAge,
-            scaledGrade * scaledAge // interaction term
+            w.grade * scaledGrade,  // linear terms (weighted)
+            w.age * scaledAge,
+            w.status * married,
+            w.grade * 0.8 * scaledGrade * scaledGrade,  // quadratic terms (reduced weight)
+            w.age * 0.8 * scaledAge * scaledAge,
+            Math.sqrt(w.grade * w.age) * 0.7 * scaledGrade * scaledAge,  // interaction terms (reduced)
+            Math.sqrt(w.grade * w.status) * 0.6 * scaledGrade * married,
+            Math.sqrt(w.age * w.status) * 0.6 * scaledAge * married,
+            w.status * 0.5 * (age < 25 ? 1 : 0),  // age group indicators (reduced)
+            w.status * 0.5 * (age >= 28 ? 1 : 0)
         ];
     };
 };
@@ -139,15 +158,21 @@ const trainModel = (studentData) => {
         const graduate = Number(item.graduate);
         const employed = Number(item.employed);
         const age = Number(item.age);
-        const isValid = !isNaN(grade) && !isNaN(graduate) && !isNaN(age) &&
-                       (employed === 0 || employed === 1) && age >= 18 && age <= 40 &&
-                       grade >= 0 && grade <= 4.0 && (graduate === 0 || graduate === 1);
+        const married = Number(item.married);
+        const isValid = !isNaN(grade) && !isNaN(graduate) && !isNaN(age) && !isNaN(married) &&
+                       (employed === 0 || employed === 1) && 
+                       (married === 0 || married === 1) &&
+                       age >= 18 && age <= 40 &&
+                       grade >= 0 && grade <= 4.0 && 
+                       (graduate === 0 || graduate === 1);
         if (!isValid) {
             console.log('Invalid data point:', item, 'Reason:', 
                 isNaN(grade) ? 'Invalid grade' :
                 isNaN(graduate) ? 'Invalid graduate status' :
                 isNaN(age) ? 'Invalid age' :
+                isNaN(married) ? 'Invalid marital status' :
                 (employed !== 0 && employed !== 1) ? 'Invalid employed status' :
+                (married !== 0 && married !== 1) ? 'Invalid marital status' :
                 'Values out of range');
         }
         return isValid;
@@ -200,7 +225,7 @@ const trainModel = (studentData) => {
         // Train model for employed students
         if (employedData.length >= 2) {
             const empFeatures = employedData.map(item => 
-                scaleFeatures(Number(item.grade), Number(item.age))
+                scaleFeatures(Number(item.grade), Number(item.age), Number(item.married))
             );
             const empTarget = employedData.map(item => Number(item.graduate));
             
@@ -218,24 +243,30 @@ const trainModel = (studentData) => {
                 constant: empCoefficients[0],
                 grade: empCoefficients[1],
                 age: empCoefficients[2],
-                gradeSquared: empCoefficients[3],
-                ageSquared: empCoefficients[4],
-                gradeAge: empCoefficients[5]
+                married: empCoefficients[3],
+                gradeSquared: empCoefficients[4],
+                ageSquared: empCoefficients[5],
+                gradeAge: empCoefficients[6],
+                gradeMarried: empCoefficients[7],
+                ageMarried: empCoefficients[8]
             });
             
             console.log('Employed model equation:');
             console.log(`P(graduate) = ${empCoefficients[0].toFixed(3)} + ` +
                        `${empCoefficients[1].toFixed(3)}*grade + ` +
                        `${empCoefficients[2].toFixed(3)}*age + ` +
-                       `${empCoefficients[3].toFixed(3)}*grade² + ` +
-                       `${empCoefficients[4].toFixed(3)}*age² + ` +
-                       `${empCoefficients[5].toFixed(3)}*grade*age`);
+                       `${empCoefficients[3].toFixed(3)}*married + ` +
+                       `${empCoefficients[4].toFixed(3)}*grade² + ` +
+                       `${empCoefficients[5].toFixed(3)}*age² + ` +
+                       `${empCoefficients[6].toFixed(3)}*grade*age + ` +
+                       `${empCoefficients[7].toFixed(3)}*grade*married + ` +
+                       `${empCoefficients[8].toFixed(3)}*age*married`);
         }
 
         // Train model for unemployed students
         if (unemployedData.length >= 2) {
             const unempFeatures = unemployedData.map(item => 
-                scaleFeatures(Number(item.grade), Number(item.age))
+                scaleFeatures(Number(item.grade), Number(item.age), Number(item.married))
             );
             const unempTarget = unemployedData.map(item => Number(item.graduate));
             
@@ -253,18 +284,24 @@ const trainModel = (studentData) => {
                 constant: unempCoefficients[0],
                 grade: unempCoefficients[1],
                 age: unempCoefficients[2],
-                gradeSquared: unempCoefficients[3],
-                ageSquared: unempCoefficients[4],
-                gradeAge: unempCoefficients[5]
+                married: unempCoefficients[3],
+                gradeSquared: unempCoefficients[4],
+                ageSquared: unempCoefficients[5],
+                gradeAge: unempCoefficients[6],
+                gradeMarried: unempCoefficients[7],
+                ageMarried: unempCoefficients[8]
             });
             
             console.log('Unemployed model equation:');
             console.log(`P(graduate) = ${unempCoefficients[0].toFixed(3)} + ` +
                        `${unempCoefficients[1].toFixed(3)}*grade + ` +
                        `${unempCoefficients[2].toFixed(3)}*age + ` +
-                       `${unempCoefficients[3].toFixed(3)}*grade² + ` +
-                       `${unempCoefficients[4].toFixed(3)}*age² + ` +
-                       `${unempCoefficients[5].toFixed(3)}*grade*age`);
+                       `${unempCoefficients[3].toFixed(3)}*married + ` +
+                       `${unempCoefficients[4].toFixed(3)}*grade² + ` +
+                       `${unempCoefficients[5].toFixed(3)}*age² + ` +
+                       `${unempCoefficients[6].toFixed(3)}*grade*age + ` +
+                       `${unempCoefficients[7].toFixed(3)}*grade*married + ` +
+                       `${unempCoefficients[8].toFixed(3)}*age*married`);
         }
 
         // Test predictions
@@ -282,7 +319,7 @@ const trainModel = (studentData) => {
                 const model = employed ? models.employed : models.unemployed;
                 if (!model) continue;
 
-                const features = scaleFeatures(grade, age);
+                const features = scaleFeatures(grade, age, Number(item.married));
                 const predicted = model.predict(features);
                 console.log('Features for prediction:', features);
                 console.log('Predicted:', predicted);
@@ -329,25 +366,35 @@ const trainModel = (studentData) => {
 
         if (models.employed) {
             const empFeatures = employedData.map(item => 
-                scaleFeatures(Number(item.grade), Number(item.age))
+                scaleFeatures(Number(item.grade), Number(item.age), Number(item.married))
             );
             const empTarget = employedData.map(item => Number(item.graduate));
             const empRSquared = calculateRSquared(models.employed, empFeatures, empTarget);
             modelStats.employed = {
                 rSquared: Number(empRSquared.toFixed(3)),
-                dataPoints: employedData.length
+                dataPoints: employedData.map(item => ({
+                    grade: Number(item.grade),
+                    age: Number(item.age),
+                    married: Number(item.married),
+                    graduate: Number(item.graduate)
+                }))
             };
         }
 
         if (models.unemployed) {
             const unempFeatures = unemployedData.map(item => 
-                scaleFeatures(Number(item.grade), Number(item.age))
+                scaleFeatures(Number(item.grade), Number(item.age), Number(item.married))
             );
             const unempTarget = unemployedData.map(item => Number(item.graduate));
             const unempRSquared = calculateRSquared(models.unemployed, unempFeatures, unempTarget);
             modelStats.unemployed = {
                 rSquared: Number(unempRSquared.toFixed(3)),
-                dataPoints: unemployedData.length
+                dataPoints: unemployedData.map(item => ({
+                    grade: Number(item.grade),
+                    age: Number(item.age),
+                    married: Number(item.married),
+                    graduate: Number(item.graduate)
+                }))
             };
         }
 

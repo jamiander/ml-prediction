@@ -1,7 +1,8 @@
-const getSuccessRate = (grade, employed = 0, age = 20, useInterpolation = false, regressionModel, scaleFeatures, studentData) => {
+const getSuccessRate = (grade, employed = 0, age = 20, useInterpolation = false, regressionModel, scaleFeatures, studentData, married = 0) => {
     const targetGrade = Number(grade);
     const targetAge = Number(age);
     const isEmployed = Number(employed);
+    const isMarried = Number(married);
     
     if (isNaN(targetGrade) || isNaN(targetAge)) {
         console.error('Invalid input:', { grade, age });
@@ -15,16 +16,20 @@ const getSuccessRate = (grade, employed = 0, age = 20, useInterpolation = false,
         const exactMatch = studentData.find(item => 
             Number(item.grade) === targetGrade && 
             Number(item.employed) === isEmployed &&
-            Number(item.age) === targetAge
+            Number(item.age) === targetAge &&
+            Number(item.married) === isMarried
         );
         if (exactMatch) {
             console.log('Exact match found:', exactMatch);
             return Number(exactMatch.graduate);
         }
 
-        // Sort data by grade for interpolation (matching employed status)
+        // Sort data by grade for interpolation (matching employed and married status)
         const sortedData = studentData
-            .filter(item => Number(item.employed) === isEmployed)
+            .filter(item => 
+                Number(item.employed) === isEmployed &&
+                Number(item.married) === isMarried
+            )
             .map(item => ({ 
                 grade: Number(item.grade),
                 age: Number(item.age), 
@@ -33,8 +38,8 @@ const getSuccessRate = (grade, employed = 0, age = 20, useInterpolation = false,
             .sort((a, b) => a.grade - b.grade);
 
         if (sortedData.length === 0) {
-            console.log('No data available for this employment status, using all data');
-            // If no data for this employment status, use all data
+            console.log('No data available for this employment/marital status combination, using all data');
+            // If no data for this combination, use all data
             sortedData.push(...studentData
                 .map(item => ({ 
                     grade: Number(item.grade),
@@ -87,13 +92,13 @@ const getSuccessRate = (grade, employed = 0, age = 20, useInterpolation = false,
         
         if (!model) {
             console.log('No model available for employment status:', isEmployed, 'using interpolation');
-            return getSuccessRate(grade, employed, age, true, regressionModel, scaleFeatures, studentData);
+            return getSuccessRate(grade, employed, age, true, regressionModel, scaleFeatures, studentData, married);
         }
 
         // Generate all polynomial features
-        const features = scaleFeatures(targetGrade, targetAge);
+        const features = scaleFeatures(targetGrade, targetAge, isMarried);
 
-        console.log('Making prediction with features:', features, 'for employed:', isEmployed);
+        console.log('Making prediction with features:', features, 'for employed:', isEmployed, 'married:', isMarried);
         
         const prediction = model.predict(features);
         const predictedValue = Array.isArray(prediction) ? prediction[0] : prediction;
@@ -101,7 +106,7 @@ const getSuccessRate = (grade, employed = 0, age = 20, useInterpolation = false,
         
         if (isNaN(predictedValue)) {
             console.log('Invalid prediction from model, using interpolation');
-            return getSuccessRate(grade, employed, age, true, regressionModel, scaleFeatures, studentData);
+            return getSuccessRate(grade, employed, age, true, regressionModel, scaleFeatures, studentData, married);
         }
         
         // Normalize prediction between 0 and 1
@@ -111,7 +116,7 @@ const getSuccessRate = (grade, employed = 0, age = 20, useInterpolation = false,
         return normalizedPrediction;
     } catch (error) {
         console.error('Error making prediction:', error.message);
-        return getSuccessRate(grade, employed, age, true, regressionModel, scaleFeatures, studentData);
+        return getSuccessRate(grade, employed, age, true, regressionModel, scaleFeatures, studentData, married);
     }
 };
 

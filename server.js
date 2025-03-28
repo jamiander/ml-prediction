@@ -23,7 +23,7 @@ let scaleFeatures = null;  // Will hold the scaling function
 fs.createReadStream('data/student-data')
     .pipe(csvParser({
         separator: ' ',
-        headers: ['grade', 'employed', 'graduate', 'age']
+        headers: ['grade', 'employed', 'graduate', 'age', 'married']
     }))
     .on('data', (row) => {
         // Convert the third column to a boolean graduate status
@@ -37,7 +37,8 @@ fs.createReadStream('data/student-data')
             grade: row.grade,
             employed: row.employed === 'true' ? 1 : 0,
             graduate: isGraduate ? 1 : 0,
-            age: row.age || '20'  // Default age if not provided
+            age: row.age || '20',  // Default age if not provided
+            married: row.married === 'true' ? 1 : 0  // Default to unmarried if not provided
         });
     })
     .on('end', () => {
@@ -91,12 +92,14 @@ app.get('/predict', (req, res) => {
     const grade = req.query.grade;
     const employed = req.query.employed === '1' || req.query.employed === 'true' ? 1 : 0;
     const age = req.query.age || 20;  // Default age if not provided
-    const graduationProbability = getSuccessRate(grade, employed, age, false, regressionModel, scaleFeatures, studentData);
+    const married = req.query.married === '1' || req.query.married === 'true' ? 1 : 0;
+    const graduationProbability = getSuccessRate(grade, employed, age, false, regressionModel, scaleFeatures, studentData, married);
     
     res.json({
         grade: Number(grade),
         employed: employed,
         age: Number(age),
+        married: married,
         graduationProbability: graduationProbability,
         willGraduate: graduationProbability >= 0.5,
         modelType: regressionModel ? 'polynomial-regression' : 'linear-interpolation',
@@ -120,7 +123,8 @@ app.get('/plot', (req, res) => {
             grade: Number(item.grade),
             employed: Number(item.employed),
             graduate: Number(item.graduate),
-            age: Number(item.age)
+            age: Number(item.age),
+            married: Number(item.married)
         }));
 
         res.json({
