@@ -26,14 +26,14 @@ const trainModel = () => {
     // Convert strings to numbers and validate data
     const validData = studentData.filter(item => {
         const grade = Number(item.grade);
-        const rate = Number(item.successRate);
+        const graduate = Number(item.graduate);
         const employed = Number(item.employed);
-        const isValid = !isNaN(grade) && !isNaN(rate) && (employed === 0 || employed === 1) &&
-                       grade >= 0 && grade <= 100 && rate >= 0 && rate <= 100;
+        const isValid = !isNaN(grade) && !isNaN(graduate) && (employed === 0 || employed === 1) &&
+                       grade >= 0 && grade <= 100 && (graduate === 0 || graduate === 1);
         if (!isValid) {
             console.log('Invalid data point:', item, 'Reason:', 
                 isNaN(grade) ? 'Invalid grade' :
-                isNaN(rate) ? 'Invalid success rate' :
+                isNaN(graduate) ? 'Invalid graduate status' :
                 (employed !== 0 && employed === 1) ? 'Invalid employed status' :
                 'Values out of range');
         }
@@ -71,16 +71,16 @@ const trainModel = () => {
         // Train model for employed students
         if (employedData.length >= 2) {
             const empFeatures = employedData.map(item => [Number(item.grade)]);
-            const empTarget = employedData.map(item => Number(item.successRate));
-            models.employed = new PolynomialRegression(empFeatures, empTarget, 1);
+            const empTarget = employedData.map(item => Number(item.graduate));
+            models.employed = new PolynomialRegression(empFeatures, empTarget, 2);
             console.log('Employed model trained with', employedData.length, 'points');
         }
 
         // Train model for unemployed students
         if (unemployedData.length >= 2) {
             const unempFeatures = unemployedData.map(item => [Number(item.grade)]);
-            const unempTarget = unemployedData.map(item => Number(item.successRate));
-            models.unemployed = new PolynomialRegression(unempFeatures, unempTarget, 1);
+            const unempTarget = unemployedData.map(item => Number(item.graduate));
+            models.unemployed = new PolynomialRegression(unempFeatures, unempTarget, 2);
             console.log('Unemployed model trained with', unemployedData.length, 'points');
         }
 
@@ -92,7 +92,7 @@ const trainModel = () => {
         for (const item of validData) {
             const grade = Number(item.grade);
             const employed = Number(item.employed);
-            const actual = Number(item.successRate);
+            const actual = Number(item.graduate);
             
             try {
                 const model = employed ? models.employed : models.unemployed;
@@ -161,7 +161,7 @@ const trainModel = () => {
 
         if (models.employed) {
             const empFeatures = employedData.map(item => [Number(item.grade)]);
-            const empTarget = employedData.map(item => Number(item.successRate));
+            const empTarget = employedData.map(item => Number(item.graduate));
             const empRSquared = calculateRSquared(models.employed, empFeatures, empTarget);
             modelStats.employed = {
                 rSquared: Number(empRSquared.toFixed(3)),
@@ -171,7 +171,7 @@ const trainModel = () => {
 
         if (models.unemployed) {
             const unempFeatures = unemployedData.map(item => [Number(item.grade)]);
-            const unempTarget = unemployedData.map(item => Number(item.successRate));
+            const unempTarget = unemployedData.map(item => Number(item.graduate));
             const unempRSquared = calculateRSquared(models.unemployed, unempFeatures, unempTarget);
             modelStats.unemployed = {
                 rSquared: Number(unempRSquared.toFixed(3)),
@@ -185,7 +185,7 @@ const trainModel = () => {
         });
 
         const avgError = totalError / validPredictions;
-        if (!isNaN(avgError) && avgError < 50) {
+        if (!isNaN(avgError) && avgError < 0.5) {  // More lenient threshold to allow polynomial fit
             regressionModel = { 
                 models,
                 stats: {
@@ -228,7 +228,7 @@ const getSuccessRate = (grade, employed = 0, useInterpolation = false) => {
         );
         if (exactMatch) {
             console.log('Exact match found:', exactMatch);
-            return Number(exactMatch.successRate.toFixed(1));
+            return Number(exactMatch.graduate);  // Already 0 or 1
         }
 
         // Sort data by grade for interpolation (matching employed status)
@@ -236,7 +236,7 @@ const getSuccessRate = (grade, employed = 0, useInterpolation = false) => {
             .filter(item => Number(item.employed) === isEmployed)
             .map(item => ({ 
                 grade: Number(item.grade), 
-                successRate: Number(item.successRate) 
+                graduate: Number(item.graduate)  // Already 0 or 1
             }))
             .sort((a, b) => a.grade - b.grade);
 
@@ -246,7 +246,7 @@ const getSuccessRate = (grade, employed = 0, useInterpolation = false) => {
             sortedData.push(...studentData
                 .map(item => ({ 
                     grade: Number(item.grade), 
-                    successRate: Number(item.successRate) 
+                    graduate: Number(item.graduate)  // Already 0 or 1
                 }))
                 .sort((a, b) => a.grade - b.grade)
             );
@@ -266,16 +266,16 @@ const getSuccessRate = (grade, employed = 0, useInterpolation = false) => {
         }
 
         // Handle edge cases
-        if (!lowerGrade && upperGrade) return Number(upperGrade.successRate.toFixed(1));
-        if (!upperGrade && lowerGrade) return Number(lowerGrade.successRate.toFixed(1));
-        if (!lowerGrade && !upperGrade) return 50; // Default value if no data available
+        if (!lowerGrade && upperGrade) return Number(upperGrade.graduate.toFixed(3));
+        if (!upperGrade && lowerGrade) return Number(lowerGrade.graduate.toFixed(3));
+        if (!lowerGrade && !upperGrade) return 0.5; // Default value if no data available
 
         // Linear interpolation
         const gradeDiff = upperGrade.grade - lowerGrade.grade;
-        const rateDiff = upperGrade.successRate - lowerGrade.successRate;
+        const rateDiff = upperGrade.graduate - lowerGrade.graduate;
         const ratio = (targetGrade - lowerGrade.grade) / gradeDiff;
         
-        const interpolatedValue = Number((lowerGrade.successRate + (rateDiff * ratio)).toFixed(1));
+        const interpolatedValue = Number((lowerGrade.graduate + (rateDiff * ratio)).toFixed(3));
         console.log('Interpolation result:', {
             lowerGrade,
             upperGrade,
@@ -308,11 +308,11 @@ const getSuccessRate = (grade, employed = 0, useInterpolation = false) => {
             return getSuccessRate(grade, employed, true);
         }
         
-        // Clamp prediction between 0 and 100
-        const clampedPrediction = Number(Math.max(0, Math.min(100, predictedValue)).toFixed(1));
-        console.log('Final prediction:', clampedPrediction);
+        // Normalize prediction between 0 and 1
+        const normalizedPrediction = Number((Math.max(0, Math.min(1, predictedValue))).toFixed(3));
+        console.log('Final prediction:', normalizedPrediction);
         
-        return clampedPrediction;
+        return normalizedPrediction;
     } catch (error) {
         console.error('Error making prediction:', error.message);
         return getSuccessRate(grade, employed, true);
@@ -322,17 +322,24 @@ const getSuccessRate = (grade, employed = 0, useInterpolation = false) => {
 fs.createReadStream('data/grade-data')
     .pipe(csvParser({
         separator: ' ',
-        headers: ['grade', 'employed', 'successRate']
+        headers: ['grade', 'employed', 'graduate']
     }))
     .on('data', (row) => {
+        // Convert the third column to a boolean graduate status
+        // If it's already true/false, use that, otherwise convert from number (≥ 50 means graduated)
+        const graduateValue = row.graduate.toLowerCase();
+        const isGraduate = graduateValue === 'true' ? true :
+                          graduateValue === 'false' ? false :
+                          Number(row.graduate) >= 50;
+
         studentData.push({
             grade: row.grade,
-            employed: row.employed === 'true' ? 1 : 0,  // Convert to 0 or 1
-            successRate: row.successRate
+            employed: row.employed === 'true' ? 1 : 0,
+            graduate: isGraduate ? 1 : 0
         });
     })
     .on('end', () => {
-        trainModel(); // Train model once all data is loaded
+        trainModel();
         console.log('Data loaded and model trained');
     });
 
@@ -355,7 +362,7 @@ app.get('/test', (req, res) => {
 
     try {
         // Test predictions on a range of grades with both employed states
-        const testGrades = [0, 25, 50, 75, 100];
+        const testGrades = [1, 3, 3, 3.75, 4];
         const results = testGrades.flatMap(grade => {
             try {
                 const results = [];
@@ -396,7 +403,7 @@ app.get('/test', (req, res) => {
             sampleData: studentData.slice(0, 3).map(item => ({
                 grade: Number(item.grade),
                 employed: Number(item.employed),
-                successRate: Number(item.successRate)
+                graduate: Number(item.graduate)
             }))
         });
     } catch (error) {
@@ -411,15 +418,74 @@ app.get('/test', (req, res) => {
 app.get('/predict', (req, res) => {
     const grade = req.query.grade;
     const employed = req.query.employed === '1' || req.query.employed === 'true' ? 1 : 0;
-    const successRate = getSuccessRate(grade, employed);
+    const graduationProbability = getSuccessRate(grade, employed);
     
     res.json({
         grade: Number(grade),
         employed: employed,
-        predictedSuccessRate: successRate,
+        graduationProbability: graduationProbability,
+        willGraduate: graduationProbability >= 0.5,  // Updated threshold to 0.5 for probability
         modelType: regressionModel ? 'polynomial-regression' : 'linear-interpolation',
         dataPoints: studentData.length
     });
+});
+
+app.get('/plot', (req, res) => {
+    if (!regressionModel) {
+        return res.json({
+            status: 'error',
+            message: 'Model not trained'
+        });
+    }
+
+    try {
+        // Generate points for smooth curves
+        const plotPoints = [];
+        for (let grade = 1.0; grade <= 4.0; grade += 0.1) {
+            // Get predictions for both employed and unemployed
+            let employedPred = null;
+            let unemployedPred = null;
+
+            if (regressionModel.models.employed) {
+                const pred = regressionModel.models.employed.predict([grade]);
+                employedPred = Number(Math.max(0, Math.min(1, Array.isArray(pred) ? pred[0] : pred)).toFixed(3));
+            }
+
+            if (regressionModel.models.unemployed) {
+                const pred = regressionModel.models.unemployed.predict([grade]);
+                unemployedPred = Number(Math.max(0, Math.min(1, Array.isArray(pred) ? pred[0] : pred)).toFixed(3));
+            }
+
+            plotPoints.push({
+                grade: Number(grade.toFixed(1)),
+                employed: employedPred,
+                unemployed: unemployedPred
+            });
+        }
+
+        // Get actual data points
+        const actualPoints = studentData.map(item => ({
+            grade: Number(item.grade),
+            employed: Number(item.employed),
+            graduate: Number(item.graduate)
+        }));
+
+        // Get model statistics
+        const modelStats = regressionModel.stats.modelStats;
+
+        res.json({
+            status: 'success',
+            plotPoints,
+            actualPoints,
+            modelStats
+        });
+    } catch (error) {
+        res.json({
+            status: 'error',
+            message: 'Error generating plot data',
+            error: error.message
+        });
+    }
 });
 
 app.listen(port, () => {
